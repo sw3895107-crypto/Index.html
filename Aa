@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sleek Sands Slots</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+  --bg:#071016; --accent:#ffd166; --muted:#98a6b3; --glass: rgba(255,255,255,0.03);
+  --shadow: 0 8px 30px rgba(2,6,12,0.7); --hud-height:84px;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:linear-gradient(180deg,#041018 0%, #071821 100%);color:#e6f0f6;display:flex;flex-direction:column;align-items:stretch;overflow:hidden}
+canvas#world{display:block;width:100%;height:calc(100vh - var(--hud-height));background:linear-gradient(180deg,rgba(2,8,12,0),rgba(2,8,12,0.18))}
+.hud{height:var(--hud-height);display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:var(--shadow);backdrop-filter:blur(6px)}
+.controls{display:flex;align-items:center;gap:14px}
+#spinBtn{border:0;padding:12px 20px;border-radius:12px;background:linear-gradient(180deg,var(--accent),#ffb347);color:#072126;font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 6px 18px rgba(255,165,0,0.12);transition:transform .12s ease,filter .12s ease}
+#spinBtn:active{transform:translateY(1px)}
+#spinBtn[disabled]{opacity:.45;cursor:default;transform:none;filter:grayscale(.3)}
+#credits{color:var(--muted);padding:8px 12px;border-radius:10px;background:var(--glass);font-weight:600;min-width:110px;text-align:center}
+#bonusModal.hidden{display:none}
+#bonusModal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(3,7,10,0.5),rgba(3,7,10,0.6));z-index:1200}
+.bonusBox{background:linear-gradient(180deg,#0b2530,#06202a);padding:22px;border-radius:16px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 20px 60px rgba(2,8,12,0.7);min-width:320px;max-width:420px;text-align:center}
+.bonusBox h2{font-size:20px;margin-bottom:6px}
+.bonusBox p{color:var(--muted);margin:12px 0 18px}
+#claimBonus{border:0;padding:10px 18px;border-radius:10px;background:var(--accent);color:#072126;font-weight:700;cursor:pointer}
+@media (max-width:520px){.hud{padding:10px}#spinBtn{padding:10px 14px;font-size:14px}canvas#world{height:calc(100vh - 72px)}}
+</style>
+</head>
+<body>
+<canvas id="world"></canvas>
+<div class="hud">
+  <div class="controls">
+    <button id="spinBtn">🎰 SPIN</button>
+    <span id="credits">Credits: 100</span>
+  </div>
+</div>
+<div id="bonusModal" class="hidden">
+  <div class="bonusBox">
+    <h2>🎁 BONUS</h2>
+    <p id="bonusText"></p>
+    <button id="claimBonus">Claim</button>
+  </div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('world');
+  const ctx = canvas.getContext('2d');
+  const spinBtn = document.getElementById('spinBtn');
+  const creditsNode = document.getElementById('credits');
+  const bonusModal = document.getElementById('bonusModal');
+  const bonusText = document.getElementById('bonusText');
+  const claimBonus = document.getElementById('claimBonus');
+
+  const SYMBOLS = ['🍒','🍋','🔔','⭐','7️⃣','🍀','BAR'];
+  const REEL_COUNT = 3;
+  const SYMBOL_HEIGHT = 110;
+  const SPIN_DURATION = 1400;
+  let credits = 100;
+  let reels = [];
+  let isSpinning = false;
+
+  function resize() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = canvas.clientWidth * dpr;
+    canvas.height = canvas.clientHeight * dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    draw();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    const reelW = canvas.width/4;
+    const reelH = canvas.height - 20;
+    for(let r=0;r<REEL_COUNT;r++){
+      const reel = reels[r];
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(r*reelW + 20, 10, reelW-40, reelH-20);
+      ctx.clip();
+      for(let i=-1;i<5;i++){
+        const idx = Math.floor(reel.offset + i)%SYMBOLS.length;
+        const y = 10 + (i*SYMBOL_HEIGHT) - (reel.offset-Math.floor(reel.offset))*SYMBOL_HEIGHT + 10;
+        ctx.font = SYMBOL_HEIGHT*0.6+'px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle='white';
+        ctx.fillText(SYMBOLS[idx], r*reelW + reelW/2, y+SYMBOL_HEIGHT/2);
+      }
+      ctx.restore();
+    }
+  }
+
+  function updateCredits(){creditsNode.textContent = `Credits: ${credits}`;}
+
+  function localSpin(){
+    const symbols = [];
+    for(let i=0;i<REEL_COUNT;i++)symbols.push(SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)]);
+    let payout=0;
+    if(symbols.every(s=>s===symbols[0])) payout = symbols[0]==='7️⃣'?50:10;
+    else{
+      const counts={}; symbols.forEach(s=>counts[s]=(counts[s]||0)+1);
+      if(Object.values(counts).some(c=>c===2)) payout=2;
+    }
+    const bonus = payout===0 && Math.random()<0.06?{text:'Lucky Spin! +5 credits',amount:5}:null;
+    return {resultSymbols:symbols,payout,bonus};
+  }
+
+  function animate(resultSymbols,payout,bonus){
+    return new Promise(resolve=>{
+      const targets=resultSymbols.map(s=>SYMBOLS.indexOf(s));
+      const start=performance.now();
+      const durations=[];for(let r=0;r<REEL_COUNT;r++){durations[r]=SPIN_DURATION+r*260+Math.random()*180; reels[r].offset=Math.random()*SYMBOLS.length;}
+      function step(now){
+        const t=now-start;
+        for(let r=0;r<REEL_COUNT;r++){
+          const reel=reels[r];
+          const progress=Math.min(1,t/durations[r]);
+          const ease=1-Math.pow(1-progress,3);
+          const cycles=4+r*1.2;
+          reel.offset=targets[r]+cycles*SYMBOLS.length*ease;
+        }
+        draw();
+        if(t<Math.max(...durations)+120) requestAnimationFrame(step);
+        else{
+          for(let r=0;r<REEL_COUNT;r++) reels[r].offset=targets[r];
+          draw();
+          if(payout>0) credits+=payout;
+          if(bonus) showBonus(bonus.text,bonus.amount);
+          updateCredits();
+          resolve();
+        }
+      }
+      requestAnimationFrame(step);
+    });
+  }
+
+  function showBonus(text,amount){
+    bonusText.textContent=text;
+    bonusModal.classList.remove('hidden');
+    claimBonus.onclick=()=>{
+      if(amount) credits+=amount;
+      bonusModal.classList.add('hidden');
+      updateCredits();
+    };
+  }
+
+  spinBtn.addEventListener('click',()=>{
+    if(isSpinning) return;
+    if(credits<=0){showBonus('No credits left — enjoy a small bonus!',5); return;}
+    isSpinning=true; spinBtn.disabled=true; credits--; updateCredits();
+    const result=localSpin();
+    animate(result.resultSymbols,result.payout,result.bonus).then(()=>{isSpinning=false; spinBtn.disabled=false;});
+  });
+
+  for(let r=0;r<REEL_COUNT;r++) reels.push({offset:Math.floor(Math.random()*SYMBOLS.length)});
+  updateCredits();
+  function idleLoop(){draw();requestAnimationFrame(idleLoop);} requestAnimationFrame(idleLoop);
+})();
+</script>
+</body>
+</html>
